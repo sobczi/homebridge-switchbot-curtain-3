@@ -11,6 +11,8 @@ import { PLATFORM_NAME, PLUGIN_NAME } from "./settings.js";
 import { Curtain3Config } from "./models/Curtain3Config.js";
 import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "switchbot-curtain-3";
 import { SwitchBotCurtain3Accessory } from "./switchBotCurtain3Accessory.js";
+import { Peripheral } from "@stoprocent/noble";
+import { BluetoothLowEnergy } from "./bluetoothLowEnergy.js";
 
 /**
  * HomebridgePlatform
@@ -23,6 +25,7 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 
 	// this is used to track restored cached accessories
 	public readonly accessories: PlatformAccessory[] = [];
+	private readonly ble = new BluetoothLowEnergy();
 
 	constructor(
 		public readonly log: Logging,
@@ -67,6 +70,17 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 			return;
 		}
 
+		await this.ble.initialize();
+		const desiredPeripherals = await this.ble.findDesiredPeripherals([
+			macAddress,
+		]);
+
+		if (!desiredPeripherals.length) {
+			throw new Error("Desired peripherals not found");
+		}
+
+		const desired = desiredPeripherals[0];
+
 		const ble = new SwitchBotBLE();
 		const discovered: SwitchbotDevice[] = await ble.discover();
 		const foundCurtain = discovered.find(
@@ -77,7 +91,7 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 			return;
 		}
 
-		const uuid = this.api.hap.uuid.generate(foundCurtain.id);
+		const uuid = this.api.hap.uuid.generate(desired.id);
 		const existingAccessory = this.accessories.find(
 			(accessory) => accessory.UUID === uuid
 		);
