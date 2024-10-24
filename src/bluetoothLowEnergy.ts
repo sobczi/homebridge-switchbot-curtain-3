@@ -71,11 +71,6 @@ export class BluetoothLowEnergy extends EventEmitter {
 		const startDiscovery = async (): Promise<void> => {
 			this.log?.debug("findDesiredPeripherals: Started discovery");
 			this.noble.on("discover", async (p: Peripheral) => {
-				// if (this.watchedMacAddresses.length === desiredPeripherals.length) {
-				// 	await this.stopScanning();
-				// 	return;
-				// }
-
 				p.address = this.formatAddress(p);
 
 				if (this.watchedMacAddresses.includes(p.address)) {

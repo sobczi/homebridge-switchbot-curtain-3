@@ -137,6 +137,7 @@ export class SwitchBotCurtain3Accessory {
 
 		for (const service of services) {
 			const characteristics = await service.discoverCharacteristicsAsync();
+			this.platform.log.debug(JSON.stringify(characteristics));
 			writeChar = characteristics.find((c) => c.properties.includes("write"));
 		}
 
