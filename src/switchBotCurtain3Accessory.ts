@@ -133,11 +133,22 @@ export class SwitchBotCurtain3Accessory {
 		}
 
 		let writeChar: Characteristic | undefined;
-		const services = await this.curtain.discoverServicesAsync();
-		for (const service of services) {
-			const characteristics = await service.discoverCharacteristicsAsync();
+		while (!writeChar) {
+			const services = await this.curtain.discoverServicesAsync();
+			this.platform.log.debug(`services: ${services.length}`);
+
+			for (const service of services) {
+				const characteristics = await service.discoverCharacteristicsAsync();
+				this.platform.log.debug(`characteristics: ${characteristics.length}`);
+				if (!writeChar) {
+					writeChar = characteristics.find((c) =>
+						c.properties.includes("write")
+					);
+				}
+			}
+
 			if (!writeChar) {
-				writeChar = characteristics.find((c) => c.properties.includes("write"));
+				this.platform.log.error("write char not found. reruning");
 			}
 		}
 
