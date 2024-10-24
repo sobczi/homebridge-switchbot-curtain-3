@@ -2,7 +2,7 @@
 	"name": "homebridge-switchbot-curtain-3",
 	"displayName": "SwitchBot Curtain 3",
 	"type": "module",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Supports one SwitchBot Curtain",
 	"author": "Your Name",
 	"license": "Apache-2.0",
@@ -36,9 +36,11 @@
 		"homebridge": "^2.0.0-beta.0",
 		"nodemon": "^3.1.4",
 		"rimraf": "^6.0.1",
-		"switchbot-curtain-3": "^3.2.1",
 		"ts-node": "^10.9.2",
 		"typescript": "^5.5.4",
 		"typescript-eslint": "^8.0.1"
+	},
+	"dependencies": {
+		"switchbot-curtain-3": "^3.2.1"
 	}
 }
