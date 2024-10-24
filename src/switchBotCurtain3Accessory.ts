@@ -132,6 +132,7 @@ export class SwitchBotCurtain3Accessory {
 			await this.curtain.connectAsync();
 		}
 
+		this.platform.log.debug(`curtain state: ${this.curtain.state}`);
 		const services = await this.curtain.discoverServicesAsync();
 		let writeChar: Characteristic | undefined;
 		this.platform.log.debug(`found services: ${services.length}`);

@@ -2,7 +2,7 @@
 	"name": "homebridge-switchbot-curtain-3",
 	"displayName": "SwitchBot Curtain 3",
 	"type": "module",
-	"version": "1.1.7",
+	"version": "1.1.8",
 	"description": "Supports one SwitchBot Curtain",
 	"author": "Your Name",
 	"license": "Apache-2.0",
