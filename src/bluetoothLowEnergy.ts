@@ -70,11 +70,6 @@ export class BluetoothLowEnergy extends EventEmitter {
 
 				if (this.watchedMacAddresses.includes(p.address)) {
 					desiredPeripherals.push(p);
-					console.log(
-						`[${p.advertisement.localName || "Unknown"} @ ${
-							p.address
-						}] Peripheral found.`
-					);
 				}
 			});
 		};

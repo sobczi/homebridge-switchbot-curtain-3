@@ -163,8 +163,9 @@ export class SwitchBotCurtain3Accessory {
 			bufferData[3] > 100 ? bufferData[3] - 128 : bufferData[3];
 		const inMotion: boolean = bufferData[3] > 100;
 
-		// TODO: Add log if debug
-		// console.log({ battery, position, inMotion, bufferData });
+		this.platform.log.debug(
+			JSON.stringify({ battery, position, inMotion, bufferData })
+		);
 
 		this.setCurrentPosition(position);
 		this.setBatteryLevel(battery as number);

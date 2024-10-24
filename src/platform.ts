@@ -56,10 +56,13 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 		}
 
 		this.ble.watchedMacAddresses = [this.config.macAddress];
+		this.log.debug("Initializing BLE");
 		await this.ble.initialize();
 
 		const desiredPeripherals = await this.ble.findDesiredPeripherals();
+		this.log.debug(`Found ${desiredPeripherals.length} desired peripherals`);
 		if (!desiredPeripherals.length) {
+			this.log.error("Desired peripherals not found");
 			throw new Error("Desired peripherals not found");
 		}
 
@@ -69,6 +72,7 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 		const existingAccessory = this.accessories.find(
 			(accessory) => accessory.UUID === uuid
 		);
+
 		if (existingAccessory) {
 			this.log.info("Restoring accessory from cache");
 			this.createNewCurtainAccessory(existingAccessory, peripheral);
