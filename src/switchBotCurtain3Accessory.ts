@@ -132,16 +132,21 @@ export class SwitchBotCurtain3Accessory {
 			await this.curtain.connectAsync();
 		}
 
-		const services = await this.curtain.discoverServicesAsync();
 		let writeChar: Characteristic | undefined;
-		this.platform.log.debug(`found services: ${services.length}`);
+		while (!writeChar) {
+			const services = await this.curtain.discoverServicesAsync();
+			this.platform.log.debug(`found services: ${services.length}`);
 
-		for (const service of services) {
-			const characteristics = await service.discoverCharacteristicsAsync();
-			this.platform.log.debug(
-				`changePosition: found ${characteristics.length} characteristics at some service`
+			for (const service of services) {
+				const characteristics = await service.discoverCharacteristicsAsync();
+				this.platform.log.debug(
+					`changePosition: found ${characteristics.length} characteristics at some service`
+				);
+				writeChar = characteristics.find((c) => c.properties.includes("write"));
+			}
+			this.platform.log.error(
+				"Couldn`t find write charateristics. Trying again."
 			);
-			writeChar = characteristics.find((c) => c.properties.includes("write"));
 		}
 
 		if (!writeChar) {
