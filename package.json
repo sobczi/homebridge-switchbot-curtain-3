@@ -3,7 +3,6 @@
 	"displayName": "SwitchBot Curtain 3",
 	"type": "module",
 	"version": "1.0.0",
-	"private": true,
 	"description": "Supports one SwitchBot Curtain",
 	"author": "Your Name",
 	"license": "Apache-2.0",
