@@ -6,7 +6,7 @@ import {
 
 import type { SwitchBotCurtain3Platform } from "./platform.js";
 import { Curtain3State } from "./models/Curtain3State.js";
-import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "node-switchbot";
+import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "switchbot-curtain-3";
 
 export class SwitchBotCurtain3Accessory {
 	private service: Service;
