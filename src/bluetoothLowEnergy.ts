@@ -11,10 +11,12 @@ export class BluetoothLowEnergy extends EventEmitter {
 	watchedMacAddresses: string[] = [];
 
 	async startScanning(allowDuplicates?: boolean): Promise<void> {
+		this.log?.debug("startScanning");
 		await this.noble.startScanningAsync([], allowDuplicates);
 	}
 
 	async stopScanning(): Promise<void> {
+		this.log?.debug("stopScanning");
 		this.noble.removeAllListeners("discover");
 		await this.noble.stopScanningAsync();
 	}
@@ -59,12 +61,16 @@ export class BluetoothLowEnergy extends EventEmitter {
 	}
 
 	async findDesiredPeripherals(): Promise<Peripheral[]> {
+		this.log?.debug(
+			"findDesiredPeripherals: Searching for desired peripherals"
+		);
 		const desiredPeripherals: Peripheral[] = [];
 
 		let timer: NodeJS.Timeout;
 
 		const startDiscovery = async (): Promise<void> => {
 			this.noble.on("discover", async (p: Peripheral) => {
+				this.log?.debug("findDesiredPeripherals: Started discovery");
 				if (this.watchedMacAddresses.length === desiredPeripherals.length) {
 					await this.stopScanning();
 					return;
@@ -85,6 +91,7 @@ export class BluetoothLowEnergy extends EventEmitter {
 					async () =>
 						resolve(
 							await this.stopScanning().then(() => {
+								this.log?.debug("findDesiredPeripherals: Stopping discovery");
 								clearTimeout(timer);
 								return desiredPeripherals;
 							})
