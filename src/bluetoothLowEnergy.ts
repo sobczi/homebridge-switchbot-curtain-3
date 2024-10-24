@@ -1,10 +1,12 @@
 import { Advertisement, Peripheral } from "@stoprocent/noble";
 import { Noble } from "./models/Noble";
 import { EventEmitter } from "node:events";
+import { Logging } from "homebridge";
 
 export class BluetoothLowEnergy extends EventEmitter {
 	noble: Noble = {} as any;
 	onAd?: (ad: Advertisement) => Promise<void> | void;
+	log?: Logging;
 
 	watchedMacAddresses: string[] = [];
 
@@ -18,6 +20,7 @@ export class BluetoothLowEnergy extends EventEmitter {
 	}
 
 	watchAds(): void {
+		this.log?.debug("Watching ads");
 		this.startScanning(true);
 		this.noble.on("discover", async (peripheral: Peripheral) => {
 			peripheral.address = this.formatAddress(peripheral);
@@ -45,6 +48,7 @@ export class BluetoothLowEnergy extends EventEmitter {
 						reject(new Error(`Adapter is not ready: ${state}`));
 						break;
 					case "poweredOn":
+						this.log?.debug("Initialization finished");
 						resolve();
 						break;
 					default:

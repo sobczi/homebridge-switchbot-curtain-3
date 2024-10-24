@@ -141,7 +141,7 @@ export class SwitchBotCurtain3Accessory {
 		}
 
 		if (!writeChar) {
-			throw Error("Coulnd't find write charateristics");
+			throw Error("Couldn't find write charateristics");
 		}
 
 		await writeChar.writeAsync(buffer, true);

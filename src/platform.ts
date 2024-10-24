@@ -29,6 +29,7 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 		this.Service = api.hap.Service;
 		this.Characteristic = api.hap.Characteristic;
 		this.ble = new BluetoothLowEnergy();
+		this.ble.log = this.log;
 
 		this.log.debug("Finished initializing platform:", this.config.name);
 
