@@ -134,10 +134,12 @@ export class SwitchBotCurtain3Accessory {
 
 		const services = await this.curtain.discoverServicesAsync();
 		let writeChar: Characteristic | undefined;
+		this.platform.log.debug(`found services: ${services.length}`);
 
 		for (const service of services) {
 			const characteristics = await service.discoverCharacteristicsAsync();
-			this.platform.log.debug(JSON.stringify(characteristics));
+			this.platform.log.debug(`found chars: ${services.length}`);
+			// this.platform.log.debug(JSON.stringify(characteristics));
 			writeChar = characteristics.find((c) => c.properties.includes("write"));
 		}
 
