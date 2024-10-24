@@ -9,7 +9,7 @@ import type {
 
 import { PLATFORM_NAME, PLUGIN_NAME } from "./settings.js";
 import { Curtain3Config } from "./models/Curtain3Config.js";
-import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "node-switchbot";
+import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "switchbot-curtain-3";
 import { SwitchBotCurtain3Accessory } from "./switchBotCurtain3Accessory.js";
 
 /**
