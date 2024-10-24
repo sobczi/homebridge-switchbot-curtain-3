@@ -41,7 +41,6 @@
 		"typescript-eslint": "^8.0.1"
 	},
 	"dependencies": {
-		"@stoprocent/noble": "^1.15.1",
-		"switchbot-curtain-3": "^3.2.1"
+		"@stoprocent/noble": "^1.15.1"
 	}
 }

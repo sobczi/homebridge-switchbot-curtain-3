@@ -9,23 +9,17 @@ import type {
 
 import { PLATFORM_NAME, PLUGIN_NAME } from "./settings.js";
 import { Curtain3Config } from "./models/Curtain3Config.js";
-import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "switchbot-curtain-3";
 import { SwitchBotCurtain3Accessory } from "./switchBotCurtain3Accessory.js";
-import { Peripheral } from "@stoprocent/noble";
 import { BluetoothLowEnergy } from "./bluetoothLowEnergy.js";
+import { Peripheral } from "@stoprocent/noble";
 
-/**
- * HomebridgePlatform
- * This class is the main constructor for your plugin, this is where you should
- * parse the user config and discover/register accessories with Homebridge.
- */
 export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 	public readonly Service: typeof Service;
 	public readonly Characteristic: typeof Characteristic;
 
-	// this is used to track restored cached accessories
 	public readonly accessories: PlatformAccessory[] = [];
-	private readonly ble = new BluetoothLowEnergy();
+
+	private readonly ble: BluetoothLowEnergy;
 
 	constructor(
 		public readonly log: Logging,
@@ -34,6 +28,7 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 	) {
 		this.Service = api.hap.Service;
 		this.Characteristic = api.hap.Characteristic;
+		this.ble = new BluetoothLowEnergy();
 
 		this.log.debug("Finished initializing platform:", this.config.name);
 
@@ -48,56 +43,35 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 		});
 	}
 
-	/**
-	 * This function is invoked when homebridge restores cached accessories from disk at startup.
-	 * It should be used to set up event handlers for characteristics and update respective values.
-	 */
 	configureAccessory(accessory: PlatformAccessory) {
 		this.log.info("Loading accessory from cache:", accessory.displayName);
 
-		// add the restored accessory to the accessories cache, so we can track if it has already been registered
 		this.accessories.push(accessory);
 	}
 
-	/**
-	 * This is an example method showing how to register discovered accessories.
-	 * Accessories must only be registered once, previously created accessories
-	 * must not be registered again to prevent "duplicate UUID" errors.
-	 */
 	async discoverDevices() {
 		const macAddress = this.config.macAddress;
 		if (!macAddress) {
 			return;
 		}
 
+		this.ble.watchedMacAddresses = [this.config.macAddress];
 		await this.ble.initialize();
-		const desiredPeripherals = await this.ble.findDesiredPeripherals([
-			macAddress,
-		]);
 
+		const desiredPeripherals = await this.ble.findDesiredPeripherals();
 		if (!desiredPeripherals.length) {
 			throw new Error("Desired peripherals not found");
 		}
 
-		const desired = desiredPeripherals[0];
+		const peripheral = desiredPeripherals[0];
 
-		const ble = new SwitchBotBLE();
-		const discovered: SwitchbotDevice[] = await ble.discover();
-		const foundCurtain = discovered.find(
-			(d) => d.deviceAddress.toLowerCase() === macAddress.toLowerCase()
-		) as WoCurtain;
-
-		if (!foundCurtain) {
-			return;
-		}
-
-		const uuid = this.api.hap.uuid.generate(desired.id);
+		const uuid = this.api.hap.uuid.generate(peripheral.id);
 		const existingAccessory = this.accessories.find(
 			(accessory) => accessory.UUID === uuid
 		);
 		if (existingAccessory) {
 			this.log.info("Restoring accessory from cache");
-			new SwitchBotCurtain3Accessory(this, existingAccessory, foundCurtain);
+			this.createNewCurtainAccessory(existingAccessory, peripheral);
 		} else {
 			this.log.info("Adding new accessory");
 			const accessory = new this.api.platformAccessory(
@@ -105,18 +79,23 @@ export class SwitchBotCurtain3Platform implements DynamicPlatformPlugin {
 				uuid
 			);
 
-			// store a copy of the device object in the `accessory.context`
-			// the `context` property can be used to store any data about the accessory you may need
-			// accessory.context.device = foundCurtain;
+			this.createNewCurtainAccessory(accessory, peripheral);
 
-			// create the accessory handler for the newly create accessory
-			// this is imported from `platformAccessory.ts`
-			new SwitchBotCurtain3Accessory(this, accessory, foundCurtain);
-
-			// link the accessory to your platform
 			this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [
 				accessory,
 			]);
 		}
+	}
+
+	private createNewCurtainAccessory(
+		accessory: PlatformAccessory,
+		peripheral: Peripheral
+	): SwitchBotCurtain3Accessory {
+		return new SwitchBotCurtain3Accessory(
+			this,
+			accessory,
+			peripheral,
+			this.ble
+		);
 	}
 }

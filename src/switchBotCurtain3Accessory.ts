@@ -6,25 +6,22 @@ import {
 
 import type { SwitchBotCurtain3Platform } from "./platform.js";
 import { Curtain3State } from "./models/Curtain3State.js";
-import { SwitchBotBLE, SwitchbotDevice, WoCurtain } from "switchbot-curtain-3";
+import { BluetoothLowEnergy } from "./bluetoothLowEnergy.js";
+import { Advertisement, Characteristic, Peripheral } from "@stoprocent/noble";
 
 export class SwitchBotCurtain3Accessory {
 	private service: Service;
 
 	private currentState: Curtain3State;
 
-	private ble: SwitchBotBLE;
-
 	constructor(
 		private readonly platform: SwitchBotCurtain3Platform,
 		private readonly accessory: PlatformAccessory,
-		private readonly woCurtain: WoCurtain
+		private readonly curtain: Peripheral,
+		private readonly ble: BluetoothLowEnergy
 	) {
 		this.currentState = this.setInitialState();
-		this.ble = new SwitchBotBLE();
-		this.startScanning();
-		this.watchScanningResults();
-		this.woCurtain.connect();
+		this.watchAds();
 
 		// set accessory information
 		this.accessory
@@ -67,12 +64,6 @@ export class SwitchBotCurtain3Accessory {
 			.getCharacteristic(this.platform.Characteristic.BatteryLevel)
 			.onSet(this.setBatteryLevel.bind(this))
 			.onGet(this.getBatteryLevel.bind(this));
-	}
-
-	// Context
-
-	getContext(): SwitchbotDevice {
-		return this.accessory.context as SwitchbotDevice;
 	}
 
 	// Battery Level
@@ -128,33 +119,59 @@ export class SwitchBotCurtain3Accessory {
 				: this.platform.Characteristic.PositionState.DECREASING
 		);
 
-		await this.woCurtain.runToPos(revertedValue);
+		await this.changePosition(revertedValue);
 	}
 
-	private watchScanningResults(): void {
-		this.ble.onadvertisement = ({
-			serviceData: { battery, inMotion, position },
-		}) => {
-			const p = position as number;
+	private async changePosition(position: number): Promise<void> {
+		position = Math.max(0, Math.min(100, position));
 
-			// 128 w przypadku zwiekszania zakresu zaciemnienia
-			const pos: number = p > 100 ? p - 128 : p;
+		const bytes = [0x57, 0x0f, 0x45, 0x01, 0x05, 0xff, position];
+		const buffer = Buffer.from(bytes);
 
-			// Position is -1 when value is 225 || 228 => it is during movement
-			this.setCurrentPosition(pos);
-			this.setBatteryLevel(battery as number);
+		if (this.curtain.state !== "connected") {
+			await this.curtain.connectAsync();
+		}
 
-			if (!inMotion) {
-				this.setTargetPosition(pos);
-				this.setPositionState(
-					this.platform.Characteristic.PositionState.STOPPED
-				);
-			}
-		};
+		const services = await this.curtain.discoverServicesAsync();
+		let writeChar: Characteristic | undefined;
+
+		for (const service of services) {
+			const characteristics = await service.discoverCharacteristicsAsync();
+			writeChar = characteristics.find((c) => c.properties.includes("write"));
+		}
+
+		if (!writeChar) {
+			throw Error("Coulnd't find write charateristics");
+		}
+
+		await writeChar.writeAsync(buffer, true);
+		// TODO: Add disconnect after some time
+		// await this.curtain.disconnectAsync();
 	}
 
-	private startScanning(): void {
-		this.ble.startScan({ id: this.woCurtain.deviceAddress });
+	private watchAds(): void {
+		this.ble.onAd = (ad: Advertisement) => this.parseAd(ad);
+		this.ble.watchAds();
+	}
+
+	private parseAd(ad: Advertisement): void {
+		const serviceData = ad.serviceData[0]?.data;
+		const { data: bufferData } = JSON.parse(JSON.stringify(serviceData)) as any;
+
+		const battery: number = bufferData[2];
+		const position: number =
+			bufferData[3] > 100 ? bufferData[3] - 128 : bufferData[3];
+		const inMotion: boolean = bufferData[3] > 100;
+
+		// TODO: Add log if debug
+		// console.log({ battery, position, inMotion, bufferData });
+
+		this.setCurrentPosition(position);
+		this.setBatteryLevel(battery as number);
+		if (!inMotion) {
+			this.setTargetPosition(position);
+			this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
+		}
 	}
 
 	private setInitialState(): Curtain3State {
