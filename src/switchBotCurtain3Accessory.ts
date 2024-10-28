@@ -140,6 +140,10 @@ export class SwitchBotCurtain3Accessory {
 			throw new Error("Invalid curtain status.");
 		}
 
+		if (this.curtain.state === "disconnected") {
+			await this.curtain.connectAsync();
+		}
+
 		let writeChar: Characteristic | undefined;
 		while (!writeChar) {
 			const services = await this.curtain.discoverServicesAsync();
