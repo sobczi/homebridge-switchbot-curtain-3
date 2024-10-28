@@ -83,7 +83,11 @@ export class SwitchBotCurtain3Accessory {
 	}
 
 	setCurrentPosition(value: CharacteristicValue): void {
-		this.currentState.currentPosition = 100 - (value as number);
+		const newValue = 100 - (value as number);
+		if (newValue !== this.currentState.currentPosition) {
+			this.platform.log.debug(`Changing current position to: ${newValue}`);
+		}
+		this.currentState.currentPosition = newValue;
 	}
 
 	// PositionState
@@ -93,6 +97,11 @@ export class SwitchBotCurtain3Accessory {
 	}
 
 	setPositionState(value: CharacteristicValue): void {
+		if (value !== this.currentState.positionState) {
+			this.platform.log.debug(
+				`Changing position state to: ${value} (0 - decreasing, 1 - increasing, 2 - stopped)`
+			);
+		}
 		this.currentState.positionState = value as 0 | 1 | 2;
 	}
 
@@ -110,15 +119,13 @@ export class SwitchBotCurtain3Accessory {
 			return;
 		}
 
-		this.platform.log.info(`Target position changed to ${value}%`);
-
+		this.platform.log.debug(`Changing target position to: ${value}`);
 		const willIncrease = revertedValue > this.getCurrentPosition();
-		this.setPositionState(
-			willIncrease
-				? this.platform.Characteristic.PositionState.INCREASING
-				: this.platform.Characteristic.PositionState.DECREASING
-		);
+		const newPosition = willIncrease
+			? this.platform.Characteristic.PositionState.INCREASING
+			: this.platform.Characteristic.PositionState.DECREASING;
 
+		this.setPositionState(newPosition);
 		await this.changePosition(revertedValue);
 	}
 
@@ -128,8 +135,9 @@ export class SwitchBotCurtain3Accessory {
 		const bytes = [0x57, 0x0f, 0x45, 0x01, 0x05, 0xff, position];
 		const buffer = Buffer.from(bytes);
 
-		if (this.curtain.state !== "connected") {
-			await this.curtain.connectAsync();
+		if (!["disconnected", "connected"].includes(this.curtain.state)) {
+			this.platform.log.debug(`Current status: ${this.curtain.state}`);
+			throw new Error("Invalid curtain status.");
 		}
 
 		let writeChar: Characteristic | undefined;
@@ -140,10 +148,15 @@ export class SwitchBotCurtain3Accessory {
 			for (const service of services) {
 				const characteristics = await service.discoverCharacteristicsAsync();
 				this.platform.log.debug(`characteristics: ${characteristics.length}`);
+
 				if (!writeChar) {
 					writeChar = characteristics.find((c) =>
 						c.properties.includes("write")
 					);
+				}
+
+				if (writeChar) {
+					break;
 				}
 			}
 
@@ -156,9 +169,12 @@ export class SwitchBotCurtain3Accessory {
 			throw Error("Couldn't find write charateristics");
 		}
 
-		await writeChar.writeAsync(buffer, true);
-		// TODO: Add disconnect after some time
-		// await this.curtain.disconnectAsync();
+		this.platform.log.debug(`Sending change position request to device`);
+		await writeChar.writeAsync(buffer, false);
+
+		if (this.curtain.state === "connected") {
+			await this.curtain.disconnectAsync();
+		}
 	}
 
 	private watchAds(): void {
@@ -175,9 +191,9 @@ export class SwitchBotCurtain3Accessory {
 			bufferData[3] > 100 ? bufferData[3] - 128 : bufferData[3];
 		const inMotion: boolean = bufferData[3] > 100;
 
-		this.platform.log.debug(
-			JSON.stringify({ battery, position, inMotion, bufferData })
-		);
+		// this.platform.log.debug(
+		// JSON.stringify({ battery, position, inMotion, bufferData })
+		// );
 
 		this.setCurrentPosition(position);
 		this.setBatteryLevel(battery as number);
