@@ -58,22 +58,6 @@ export class SwitchBotCurtain3Accessory {
 			.getCharacteristic(this.platform.Characteristic.TargetPosition)
 			.onSet(this.setTargetPosition.bind(this))
 			.onGet(this.getTargetPosition.bind(this));
-
-		// Battery
-		this.service
-			.getCharacteristic(this.platform.Characteristic.BatteryLevel)
-			.onSet(this.setBatteryLevel.bind(this))
-			.onGet(this.getBatteryLevel.bind(this));
-	}
-
-	// Battery Level
-
-	getBatteryLevel(): number {
-		return this.currentState.batteryLevel;
-	}
-
-	setBatteryLevel(value: CharacteristicValue): void {
-		this.currentState.batteryLevel = value as number;
 	}
 
 	// Current Position
@@ -82,12 +66,12 @@ export class SwitchBotCurtain3Accessory {
 		return this.currentState.currentPosition;
 	}
 
-	setCurrentPosition(value: CharacteristicValue): void {
-		const newValue = 100 - (value as number);
-		if (newValue !== this.currentState.currentPosition) {
-			this.platform.log.debug(`Changing current position to: ${newValue}`);
+	setCurrentPosition(param: CharacteristicValue): void {
+		const value = param as number;
+		if (value !== this.currentState.currentPosition) {
+			this.platform.log.debug(`Changing current position to: ${value}`);
 		}
-		this.currentState.currentPosition = newValue;
+		this.currentState.currentPosition = value;
 	}
 
 	// PositionState
@@ -111,22 +95,23 @@ export class SwitchBotCurtain3Accessory {
 		return this.currentState.targetPosition;
 	}
 
-	async setTargetPosition(value: CharacteristicValue): Promise<void> {
-		const revertedValue = 100 - (value as number);
-		this.currentState.targetPosition = revertedValue;
+	async setTargetPosition(param: CharacteristicValue): Promise<void> {
+		const value = param as number;
+		this.currentState.targetPosition = value;
 
 		if (this.getTargetPosition() === this.getCurrentPosition()) {
+			this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 			return;
 		}
 
 		this.platform.log.debug(`Changing target position to: ${value}`);
-		const willIncrease = revertedValue > this.getCurrentPosition();
+		const willIncrease = value > this.getCurrentPosition();
 		const newPosition = willIncrease
 			? this.platform.Characteristic.PositionState.INCREASING
 			: this.platform.Characteristic.PositionState.DECREASING;
 
 		this.setPositionState(newPosition);
-		await this.changePosition(revertedValue);
+		await this.changePosition(value);
 	}
 
 	private async changePosition(position: number): Promise<void> {
@@ -135,8 +120,14 @@ export class SwitchBotCurtain3Accessory {
 		const bytes = [0x57, 0x0f, 0x45, 0x01, 0x05, 0xff, position];
 		const buffer = Buffer.from(bytes);
 
+		this.platform.log.debug(
+			`[changePosition]: Current status: ${this.curtain.state}`
+		);
+		if (["connecting", "disconnecting"].includes(this.curtain.state)) {
+			return;
+		}
+
 		if (!["disconnected", "connected"].includes(this.curtain.state)) {
-			this.platform.log.debug(`Current status: ${this.curtain.state}`);
 			throw new Error("Invalid curtain status.");
 		}
 
@@ -190,21 +181,12 @@ export class SwitchBotCurtain3Accessory {
 		const serviceData = ad.serviceData[0]?.data;
 		const { data: bufferData } = JSON.parse(JSON.stringify(serviceData)) as any;
 
-		const battery: number = bufferData[2];
 		const position: number =
 			bufferData[3] > 100 ? bufferData[3] - 128 : bufferData[3];
-		const inMotion: boolean = bufferData[3] > 100;
+		const revertedPosition = 100 - position;
 
-		// this.platform.log.debug(
-		// JSON.stringify({ battery, position, inMotion, bufferData })
-		// );
-
-		this.setCurrentPosition(position);
-		this.setBatteryLevel(battery as number);
-		if (!inMotion) {
-			this.setTargetPosition(position);
-			this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
-		}
+		this.setCurrentPosition(revertedPosition);
+		this.setTargetPosition(revertedPosition);
 	}
 
 	private setInitialState(): Curtain3State {
