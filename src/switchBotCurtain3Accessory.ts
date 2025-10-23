@@ -4,10 +4,10 @@ import {
 	type Service,
 } from "homebridge";
 
-import type { SwitchBotCurtain3Platform } from "./platform.js";
-import { Curtain3State } from "./models/Curtain3State.js";
-import { BluetoothLowEnergy } from "./bluetoothLowEnergy.js";
 import { Advertisement, Characteristic, Peripheral } from "@stoprocent/noble";
+import { BluetoothLowEnergy } from "./bluetoothLowEnergy.js";
+import { Curtain3State } from "./models/Curtain3State.js";
+import type { SwitchBotCurtain3Platform } from "./platform.js";
 
 export class SwitchBotCurtain3Accessory {
 	private service: Service;
@@ -116,6 +116,7 @@ export class SwitchBotCurtain3Accessory {
 
 	private async changePosition(position: number): Promise<void> {
 		position = Math.max(0, Math.min(100, position));
+		position = 100 - position;
 
 		const bytes = [0x57, 0x0f, 0x45, 0x01, 0x05, 0xff, position];
 		const buffer = Buffer.from(bytes);
