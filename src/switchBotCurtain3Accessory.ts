@@ -360,6 +360,10 @@ export class SwitchBotCurtain3Accessory {
 		if (revertedPosition !== previousPosition) {
 			// Position has changed - update timestamp and log
 			this.lastPositionChangeTime = currentTime;
+			
+			// Don't allow stopping too quickly after movement started (curtain needs time to move)
+			const timeSinceMovementStart = currentTime - this.movementStartTime;
+			const minimumMovementTime = 3000; // Require at least 3 seconds of movement
 
 			// Always log significant position changes, but respect debounce for unchanged positions
 			if (shouldLog || Math.abs(revertedPosition - previousPosition) >= 1) {
@@ -371,26 +375,34 @@ export class SwitchBotCurtain3Accessory {
 
 			this.setCurrentPosition(revertedPosition);
 
-			// Only update target position if it's significantly different (prevents drift)
-			if (Math.abs(revertedPosition - this.getTargetPosition()) > 5) {
-				this.setTargetPositionInternal(revertedPosition);
-			}
-
-			// Check if we've reached the target position or are very close
+			// Check if we've reached the target position or are very close FIRST
 			const targetPosition = this.getTargetPosition();
-			if (Math.abs(revertedPosition - targetPosition) <= 1) {
-				// We've reached the target, set state to stopped
+			const distanceFromTarget = Math.abs(revertedPosition - targetPosition);
+			
+			if (distanceFromTarget <= 2 && timeSinceMovementStart > minimumMovementTime) {
+				// We've reached the target (within 2%) AND enough time has passed, set state to stopped
 				if (
 					this.getPositionState() !==
 					this.platform.Characteristic.PositionState.STOPPED
 				) {
 					this.platform.log.info(
-						`Curtain reached target position ${revertedPosition}%, stopping`
+						`Curtain reached target position ${revertedPosition}% (target: ${targetPosition}%) after ${Math.round(timeSinceMovementStart/1000)}s, stopping`
 					);
 					this.setPositionState(
 						this.platform.Characteristic.PositionState.STOPPED
 					);
 				}
+			} else if (distanceFromTarget <= 2) {
+				// Close to target but too soon - log but don't stop yet
+				this.platform.log.debug(
+					`Close to target ${revertedPosition}%→${targetPosition}% but only ${Math.round(timeSinceMovementStart/1000)}s elapsed, continuing...`
+				);
+			} else {
+				// Don't auto-update target during movement - only when movement stops
+				// This prevents the target from being changed while curtain is moving
+				this.platform.log.debug(
+					`Moving towards target: current ${revertedPosition}%, target ${targetPosition}% (${distanceFromTarget}% away)`
+				);
 			}
 		} else {
 			// Position hasn't changed - check if we should consider movement stopped
