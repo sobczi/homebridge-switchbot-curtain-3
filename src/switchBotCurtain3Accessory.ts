@@ -91,14 +91,28 @@ export class SwitchBotCurtain3Accessory {
 
 	setPositionState(value: CharacteristicValue): void {
 		if (value !== this.currentState.positionState) {
-			this.platform.log.debug(
+			this.platform.log.info(
 				`Changing position state to: ${value} (0 - decreasing, 1 - increasing, 2 - stopped)`
 			);
 			this.currentState.positionState = value as 0 | 1 | 2;
+
 			// Update the HomeKit characteristic to reflect the change
-			this.service.updateCharacteristic(
-				this.platform.Characteristic.PositionState,
-				value
+			try {
+				this.service.updateCharacteristic(
+					this.platform.Characteristic.PositionState,
+					value
+				);
+				this.platform.log.debug(
+					`HomeKit characteristic updated successfully to: ${value}`
+				);
+			} catch (error) {
+				this.platform.log.error(
+					`Failed to update HomeKit characteristic: ${error}`
+				);
+			}
+		} else {
+			this.platform.log.debug(
+				`Position state already set to: ${value}, no change needed`
 			);
 		}
 	}
@@ -132,7 +146,9 @@ export class SwitchBotCurtain3Accessory {
 			return;
 		}
 
-		this.platform.log.info(`Setting target position to: ${value}% (current: ${this.getCurrentPosition()}%)`);
+		this.platform.log.info(
+			`Setting target position to: ${value}% (current: ${this.getCurrentPosition()}%)`
+		);
 		const willIncrease = value > this.getCurrentPosition();
 		const newPosition = willIncrease
 			? this.platform.Characteristic.PositionState.INCREASING
@@ -140,8 +156,12 @@ export class SwitchBotCurtain3Accessory {
 
 		this.movementStartTime = Date.now();
 		this.lastPositionChangeTime = this.movementStartTime;
-		
-		this.platform.log.info(`Curtain will ${willIncrease ? 'open (INCREASING)' : 'close (DECREASING)'}`);
+
+		this.platform.log.info(
+			`Curtain will ${
+				willIncrease ? "open (INCREASING)" : "close (DECREASING)"
+			}`
+		);
 		this.setPositionState(newPosition);
 
 		try {
@@ -261,6 +281,31 @@ export class SwitchBotCurtain3Accessory {
 		this.platform.log.debug("Starting to watch advertisements");
 		this.ble.onAd = (ad: Advertisement) => this.parseAd(ad);
 		this.ble.watchAds();
+
+		// If we're resuming ads after a movement command and we're not in STOPPED state,
+		// give it a moment then check if we should force stop
+		if (
+			this.getPositionState() !==
+			this.platform.Characteristic.PositionState.STOPPED
+		) {
+			setTimeout(() => {
+				if (
+					this.getPositionState() !==
+					this.platform.Characteristic.PositionState.STOPPED
+				) {
+					const timeSinceStart = Date.now() - this.movementStartTime;
+					if (timeSinceStart > 12000) {
+						// 12 seconds after movement start
+						this.platform.log.info(
+							"Force stopping - likely curtain finished moving during delay period"
+						);
+						this.setPositionState(
+							this.platform.Characteristic.PositionState.STOPPED
+						);
+					}
+				}
+			}, 2000); // Check after 2 seconds of resumed ad watching
+		}
 	}
 
 	private parseAd(ad: Advertisement): void {
@@ -319,13 +364,16 @@ export class SwitchBotCurtain3Accessory {
 			if (
 				this.getPositionState() !==
 					this.platform.Characteristic.PositionState.STOPPED &&
-				(timeSinceLastMovement > 3000 || timeSinceMovementStart > 60000)
+				(timeSinceLastMovement > 1500 || timeSinceMovementStart > 60000)
 			) {
-				// Stop if: 3 seconds without movement OR 60 seconds since movement started (timeout)
-				const reason = timeSinceMovementStart > 60000 ? 
-					`movement timeout after ${Math.round(timeSinceMovementStart / 1000)}s` :
-					`no movement for ${Math.round(timeSinceLastMovement / 1000)}s`;
-				
+				// Stop if: 1.5 seconds without movement OR 60 seconds since movement started (timeout)
+				const reason =
+					timeSinceMovementStart > 60000
+						? `movement timeout after ${Math.round(
+								timeSinceMovementStart / 1000
+						  )}s`
+						: `no movement for ${Math.round(timeSinceLastMovement / 1000)}s`;
+
 				this.platform.log.info(
 					`Curtain movement stopped at position ${revertedPosition}% (${reason})`
 				);
@@ -344,10 +392,15 @@ export class SwitchBotCurtain3Accessory {
 				// Only log unchanged position with debounce when already stopped
 				if (shouldLog) {
 					this.platform.log.debug(
-						`Ad position unchanged: ${revertedPosition}%`
+						`Ad position unchanged: ${revertedPosition}% (state: ${this.getPositionState()} = STOPPED)`
 					);
 					this.lastAdLogTime = currentTime;
 				}
+			} else {
+				// This shouldn't happen - log it for debugging
+				this.platform.log.warn(
+					`Unexpected state: position unchanged but state is ${this.getPositionState()} (not STOPPED)`
+				);
 			}
 		}
 	}
