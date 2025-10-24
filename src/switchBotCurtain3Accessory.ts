@@ -234,7 +234,7 @@ export class SwitchBotCurtain3Accessory {
 		});
 
 		// Send the position change command
-		await writeChar.writeAsync(buffer, true);
+		writeChar.writeAsync(buffer, true);
 		this.platform.log.info(
 			"Position change command sent to device successfully"
 		);
