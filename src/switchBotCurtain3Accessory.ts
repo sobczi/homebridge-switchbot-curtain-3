@@ -215,6 +215,7 @@ export class SwitchBotCurtain3Accessory {
 	}
 
 	private watchAds(): void {
+		this.platform.log.debug("Starting to watch advertisements");
 		this.ble.onAd = (ad: Advertisement) => this.parseAd(ad);
 		this.ble.watchAds();
 	}
