@@ -210,6 +210,7 @@ export class SwitchBotCurtain3Accessory {
 
 		if (this.curtain.state === "connected") {
 			await this.curtain.disconnectAsync();
+			this.watchAds();
 		}
 	}
 
