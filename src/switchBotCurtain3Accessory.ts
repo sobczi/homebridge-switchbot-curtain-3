@@ -18,6 +18,7 @@ export class SwitchBotCurtain3Accessory {
 	private lastPositionChangeTime: number = 0;
 	private movementStartTime: number = 0;
 	private isFirstAdvertisement: boolean = true;
+	private isUpdatingCharacteristic: boolean = false;
 
 	constructor(
 		private readonly platform: SwitchBotCurtain3Platform,
@@ -91,6 +92,14 @@ export class SwitchBotCurtain3Accessory {
 	}
 
 	setPositionState(value: CharacteristicValue): void {
+		// Prevent recursion
+		if (this.isUpdatingCharacteristic) {
+			this.platform.log.debug(
+				"Skipping position state update - already updating"
+			);
+			return;
+		}
+
 		if (value !== this.currentState.positionState) {
 			this.platform.log.info(
 				`Changing position state to: ${value} (0 - decreasing, 1 - increasing, 2 - stopped)`
@@ -99,75 +108,26 @@ export class SwitchBotCurtain3Accessory {
 
 			// Update the HomeKit characteristic to reflect the change
 			try {
-				// Force HomeKit refresh with aggressive state cycling when setting to STOPPED
-				if (value === this.platform.Characteristic.PositionState.STOPPED) {
-					// First, briefly set to a different state to force refresh
-					const oppositeState = this.currentState.positionState === 0 ? 1 : 0;
-					this.service.setCharacteristic(
-						this.platform.Characteristic.PositionState,
-						oppositeState
-					);
+				this.isUpdatingCharacteristic = true;
 
-					// Then immediately set to STOPPED
-					setTimeout(() => {
-						this.service.setCharacteristic(
-							this.platform.Characteristic.PositionState,
-							this.platform.Characteristic.PositionState.STOPPED
-						);
-						this.service.updateCharacteristic(
-							this.platform.Characteristic.PositionState,
-							this.platform.Characteristic.PositionState.STOPPED
-						);
-					}, 100);
-				} else {
-					// For non-STOPPED states, use normal update
-					this.service.setCharacteristic(
-						this.platform.Characteristic.PositionState,
-						value
-					);
-					this.service.updateCharacteristic(
-						this.platform.Characteristic.PositionState,
-						value
-					);
-				}
+				// Simple approach - just use updateCharacteristic to avoid onSet recursion
+				this.service.updateCharacteristic(
+					this.platform.Characteristic.PositionState,
+					value
+				);
 
-				// Also force update current and target position to trigger refresh
-				this.service.updateCharacteristic(
-					this.platform.Characteristic.CurrentPosition,
-					this.getCurrentPosition()
-				);
-				this.service.updateCharacteristic(
-					this.platform.Characteristic.TargetPosition,
-					this.getTargetPosition()
-				);
 				this.platform.log.debug(
 					`HomeKit characteristic updated successfully to: ${value}`
 				);
-
-				// Force a delayed secondary update to break HomeKit caching
-				if (value === this.platform.Characteristic.PositionState.STOPPED) {
-					setTimeout(() => {
-						this.platform.log.debug(
-							"Sending delayed STOPPED state update to break HomeKit cache"
-						);
-						this.service.updateCharacteristic(
-							this.platform.Characteristic.PositionState,
-							this.platform.Characteristic.PositionState.STOPPED
-						);
-
-						// Also trigger accessory information refresh as a last resort
-						this.accessory
-							.getService(this.platform.Service.AccessoryInformation)!
-							.updateCharacteristic(
-								this.platform.Characteristic.Manufacturer,
-								"SwitchBot"
-							);
-					}, 500);
-				}
 			} catch (error) {
 				this.platform.log.error(
 					`Failed to update HomeKit characteristic: ${error}`
 				);
+			} finally {
+				// Reset flag after a brief delay
+				setTimeout(() => {
+					this.isUpdatingCharacteristic = false;
+				}, 1000);
 			}
 		} else {
 			this.platform.log.debug(
