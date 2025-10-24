@@ -112,7 +112,7 @@ export class SwitchBotCurtain3Accessory {
 
 		this.setPositionState(newPosition);
 		await this.changePosition(value);
-		const changedPosition = this.getTargetPosition();
+		const changedPosition = this.getCurrentPosition();
 		if (changedPosition !== this.getTargetPosition()) {
 			this.platform.log.debug(`Position change to ${changedPosition} failed.`);
 		}
