@@ -112,6 +112,11 @@ export class SwitchBotCurtain3Accessory {
 
 		this.setPositionState(newPosition);
 		await this.changePosition(value);
+		const changedPosition = this.getTargetPosition();
+		if (changedPosition !== this.getTargetPosition()) {
+			this.platform.log.debug(`Position change to ${changedPosition} failed.`);
+		}
+		this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 	}
 
 	private async changePosition(position: number): Promise<void> {
