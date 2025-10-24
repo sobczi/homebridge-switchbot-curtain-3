@@ -144,26 +144,26 @@ export class SwitchBotCurtain3Accessory {
 			await this.curtain.connectAsync();
 		}
 
+		await this.ble.stopScanning();
 		let writeChar: Characteristic | undefined;
+		let notifyChar: Characteristic | undefined;
 		while (!writeChar) {
 			const services = await this.curtain.discoverServicesAsync();
 			this.platform.log.debug(`services: ${services.length}`);
 
 			for (const service of services) {
 				const characteristics = await service.discoverCharacteristicsAsync();
-				for (const char of characteristics) {
-					this.platform.log.debug(
-						`characteristic uuid: ${char.uuid}, type: ${char.type}`
-					);
-					this.platform.log.debug(
-						`characteristic properties: ${char.toString()}`
-					);
-				}
 				this.platform.log.debug(`characteristics: ${characteristics.length}`);
 
 				if (!writeChar) {
 					writeChar = characteristics.find((c) =>
 						c.properties.includes("write")
+					);
+				}
+
+				if (!notifyChar) {
+					notifyChar = characteristics.find((c) =>
+						c.properties.includes("notify")
 					);
 				}
 
@@ -175,6 +175,10 @@ export class SwitchBotCurtain3Accessory {
 			if (!writeChar) {
 				this.platform.log.error("write char not found. reruning");
 			}
+
+			if (!notifyChar) {
+				this.platform.log.error("notify char not found. reruning");
+			}
 		}
 
 		if (!writeChar) {
@@ -183,6 +187,11 @@ export class SwitchBotCurtain3Accessory {
 
 		this.platform.log.debug(`Sending change position request to device`);
 		await writeChar.writeAsync(buffer, true);
+		await notifyChar?.notifyAsync(true);
+
+		notifyChar?.on("data", (data) => {
+			this.platform.log.debug(data.toString());
+		});
 
 		if (this.curtain.state === "connected") {
 			await this.curtain.disconnectAsync();
