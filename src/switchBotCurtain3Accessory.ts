@@ -98,13 +98,36 @@ export class SwitchBotCurtain3Accessory {
 
 			// Update the HomeKit characteristic to reflect the change
 			try {
+				// Force multiple updates to overcome HomeKit caching
 				this.service.updateCharacteristic(
 					this.platform.Characteristic.PositionState,
 					value
 				);
+				
+				// Also force update current and target position to trigger refresh
+				this.service.updateCharacteristic(
+					this.platform.Characteristic.CurrentPosition,
+					this.getCurrentPosition()
+				);
+				this.service.updateCharacteristic(
+					this.platform.Characteristic.TargetPosition,
+					this.getTargetPosition()
+				);
+				
 				this.platform.log.debug(
 					`HomeKit characteristic updated successfully to: ${value}`
 				);
+				
+				// Force a delayed secondary update to break HomeKit caching
+				if (value === this.platform.Characteristic.PositionState.STOPPED) {
+					setTimeout(() => {
+						this.platform.log.debug("Sending delayed STOPPED state update to break HomeKit cache");
+						this.service.updateCharacteristic(
+							this.platform.Characteristic.PositionState,
+							this.platform.Characteristic.PositionState.STOPPED
+						);
+					}, 500);
+				}
 			} catch (error) {
 				this.platform.log.error(
 					`Failed to update HomeKit characteristic: ${error}`
