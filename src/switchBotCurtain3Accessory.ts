@@ -98,12 +98,16 @@ export class SwitchBotCurtain3Accessory {
 
 			// Update the HomeKit characteristic to reflect the change
 			try {
-				// Force multiple updates to overcome HomeKit caching
+				// Try both setCharacteristic and updateCharacteristic to force HomeKit refresh
+				this.service.setCharacteristic(
+					this.platform.Characteristic.PositionState,
+					value
+				);
 				this.service.updateCharacteristic(
 					this.platform.Characteristic.PositionState,
 					value
 				);
-				
+
 				// Also force update current and target position to trigger refresh
 				this.service.updateCharacteristic(
 					this.platform.Characteristic.CurrentPosition,
@@ -113,15 +117,16 @@ export class SwitchBotCurtain3Accessory {
 					this.platform.Characteristic.TargetPosition,
 					this.getTargetPosition()
 				);
-				
 				this.platform.log.debug(
 					`HomeKit characteristic updated successfully to: ${value}`
 				);
-				
+
 				// Force a delayed secondary update to break HomeKit caching
 				if (value === this.platform.Characteristic.PositionState.STOPPED) {
 					setTimeout(() => {
-						this.platform.log.debug("Sending delayed STOPPED state update to break HomeKit cache");
+						this.platform.log.debug(
+							"Sending delayed STOPPED state update to break HomeKit cache"
+						);
 						this.service.updateCharacteristic(
 							this.platform.Characteristic.PositionState,
 							this.platform.Characteristic.PositionState.STOPPED
@@ -311,23 +316,31 @@ export class SwitchBotCurtain3Accessory {
 			this.getPositionState() !==
 			this.platform.Characteristic.PositionState.STOPPED
 		) {
-			setTimeout(() => {
-				if (
-					this.getPositionState() !==
+			// Immediate check - if it's been more than 12 seconds since movement start, force stop immediately
+			const timeSinceStart = Date.now() - this.movementStartTime;
+			if (timeSinceStart > 12000) {
+				this.platform.log.info(
+					"Force stopping immediately - curtain likely finished moving during delay period"
+				);
+				this.setPositionState(
 					this.platform.Characteristic.PositionState.STOPPED
-				) {
-					const timeSinceStart = Date.now() - this.movementStartTime;
-					if (timeSinceStart > 12000) {
-						// 12 seconds after movement start
+				);
+			} else {
+				// Otherwise, check after a short delay
+				setTimeout(() => {
+					if (
+						this.getPositionState() !==
+						this.platform.Characteristic.PositionState.STOPPED
+					) {
 						this.platform.log.info(
-							"Force stopping - likely curtain finished moving during delay period"
+							"Force stopping after timeout - no movement detected"
 						);
 						this.setPositionState(
 							this.platform.Characteristic.PositionState.STOPPED
 						);
 					}
-				}
-			}, 2000); // Check after 2 seconds of resumed ad watching
+				}, 1000); // Reduced from 2000 to 1000ms for faster response
+			}
 		}
 	}
 
