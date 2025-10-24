@@ -116,6 +116,9 @@ export class SwitchBotCurtain3Accessory {
 		if (changedPosition !== this.getTargetPosition()) {
 			this.platform.log.debug(`Position change to ${changedPosition} failed.`);
 		}
+		this.platform.log.debug(
+			`Change position success. Changing state to stopped.`
+		);
 		this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 	}
 
