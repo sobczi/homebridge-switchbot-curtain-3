@@ -154,6 +154,12 @@ export class SwitchBotCurtain3Accessory {
 				const characteristics = await service.discoverCharacteristicsAsync();
 				this.platform.log.debug(`characteristics: ${characteristics.length}`);
 
+				for (const char of characteristics) {
+					this.platform.log.debug(
+						`Characteristic UUID: ${char.uuid}, properties: ${char.type}`
+					);
+				}
+
 				if (!writeChar) {
 					writeChar = characteristics.find((c) =>
 						c.properties.includes("write")
