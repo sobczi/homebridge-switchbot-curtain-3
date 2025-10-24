@@ -239,6 +239,12 @@ export class SwitchBotCurtain3Accessory {
 			"Position change command sent to device successfully"
 		);
 
+		// Wait for the device to process the command before disconnecting
+		this.platform.log.debug(
+			"Waiting 10 seconds for device to process command..."
+		);
+		await new Promise((resolve) => setTimeout(resolve, 10000));
+
 		// Disconnect and resume watching advertisements
 		if (this.curtain.state === "connected") {
 			await this.curtain.disconnectAsync();
