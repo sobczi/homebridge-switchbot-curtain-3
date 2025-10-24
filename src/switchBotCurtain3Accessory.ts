@@ -15,6 +15,7 @@ export class SwitchBotCurtain3Accessory {
 	private currentState: Curtain3State;
 
 	private lastAdLogTime: number = 0;
+	private lastPositionChangeTime: number = 0;
 
 	constructor(
 		private readonly platform: SwitchBotCurtain3Platform,
@@ -144,17 +145,13 @@ export class SwitchBotCurtain3Accessory {
 				`Position change command sent successfully to ${value}%`
 			);
 
-			// Update the current position to match target immediately for better UX
-			// The real position will be updated when we receive advertisements
-			this.setCurrentPosition(value);
+			// Don't immediately update current position - let advertisements handle it
+			// Don't set state to stopped yet - let advertisement parsing detect when movement stops
 		} catch (error) {
 			this.platform.log.error(`Failed to change position: ${error}`);
 			this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 			throw error;
 		}
-
-		// Set state to stopped - the actual movement will be tracked via advertisements
-		this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 	}
 
 	private async changePosition(position: number): Promise<void> {
@@ -275,6 +272,9 @@ export class SwitchBotCurtain3Accessory {
 		const shouldLog = timeSinceLastLog >= 2000; // 2 seconds debounce
 
 		if (revertedPosition !== previousPosition) {
+			// Position has changed - update timestamp and log
+			this.lastPositionChangeTime = currentTime;
+
 			// Always log significant position changes, but respect debounce for unchanged positions
 			if (shouldLog || Math.abs(revertedPosition - previousPosition) >= 1) {
 				this.platform.log.info(
@@ -289,11 +289,58 @@ export class SwitchBotCurtain3Accessory {
 			if (Math.abs(revertedPosition - this.getTargetPosition()) > 5) {
 				this.setTargetPositionInternal(revertedPosition);
 			}
+
+			// Check if we've reached the target position or are very close
+			const targetPosition = this.getTargetPosition();
+			if (Math.abs(revertedPosition - targetPosition) <= 1) {
+				// We've reached the target, set state to stopped
+				if (
+					this.getPositionState() !==
+					this.platform.Characteristic.PositionState.STOPPED
+				) {
+					this.platform.log.info(
+						`Curtain reached target position ${revertedPosition}%, stopping`
+					);
+					this.setPositionState(
+						this.platform.Characteristic.PositionState.STOPPED
+					);
+				}
+			}
 		} else {
-			// Only log unchanged position with debounce
-			if (shouldLog) {
-				this.platform.log.debug(`Ad position unchanged: ${revertedPosition}%`);
-				this.lastAdLogTime = currentTime;
+			// Position hasn't changed - check if we should consider movement stopped
+			const timeSinceLastMovement = currentTime - this.lastPositionChangeTime;
+
+			if (
+				this.getPositionState() !==
+					this.platform.Characteristic.PositionState.STOPPED &&
+				timeSinceLastMovement > 3000
+			) {
+				// 3 seconds without movement
+				// We were moving but position hasn't changed for 3+ seconds - set to stopped
+				this.platform.log.info(
+					`Curtain movement stopped at position ${revertedPosition}% (no movement for ${Math.round(
+						timeSinceLastMovement / 1000
+					)}s)`
+				);
+				this.setPositionState(
+					this.platform.Characteristic.PositionState.STOPPED
+				);
+
+				// Update target to match current if we didn't reach the original target
+				if (Math.abs(revertedPosition - this.getTargetPosition()) > 1) {
+					this.setTargetPositionInternal(revertedPosition);
+				}
+			} else if (
+				this.getPositionState() ===
+				this.platform.Characteristic.PositionState.STOPPED
+			) {
+				// Only log unchanged position with debounce when already stopped
+				if (shouldLog) {
+					this.platform.log.debug(
+						`Ad position unchanged: ${revertedPosition}%`
+					);
+					this.lastAdLogTime = currentTime;
+				}
 			}
 		}
 	}
