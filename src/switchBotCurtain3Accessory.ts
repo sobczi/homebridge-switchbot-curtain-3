@@ -151,6 +151,14 @@ export class SwitchBotCurtain3Accessory {
 
 			for (const service of services) {
 				const characteristics = await service.discoverCharacteristicsAsync();
+				for (const char of characteristics) {
+					this.platform.log.debug(
+						`characteristic uuid: ${char.uuid}, type: ${char.type}`
+					);
+					this.platform.log.debug(
+						`characteristic properties: ${char.toString()}`
+					);
+				}
 				this.platform.log.debug(`characteristics: ${characteristics.length}`);
 
 				if (!writeChar) {
@@ -174,7 +182,7 @@ export class SwitchBotCurtain3Accessory {
 		}
 
 		this.platform.log.debug(`Sending change position request to device`);
-		await writeChar.writeAsync(buffer, false);
+		await writeChar.writeAsync(buffer, true);
 
 		if (this.curtain.state === "connected") {
 			await this.curtain.disconnectAsync();
