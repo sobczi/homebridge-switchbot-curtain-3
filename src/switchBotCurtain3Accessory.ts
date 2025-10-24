@@ -99,15 +99,37 @@ export class SwitchBotCurtain3Accessory {
 
 			// Update the HomeKit characteristic to reflect the change
 			try {
-				// Try both setCharacteristic and updateCharacteristic to force HomeKit refresh
-				this.service.setCharacteristic(
-					this.platform.Characteristic.PositionState,
-					value
-				);
-				this.service.updateCharacteristic(
-					this.platform.Characteristic.PositionState,
-					value
-				);
+				// Force HomeKit refresh with aggressive state cycling when setting to STOPPED
+				if (value === this.platform.Characteristic.PositionState.STOPPED) {
+					// First, briefly set to a different state to force refresh
+					const oppositeState = this.currentState.positionState === 0 ? 1 : 0;
+					this.service.setCharacteristic(
+						this.platform.Characteristic.PositionState,
+						oppositeState
+					);
+
+					// Then immediately set to STOPPED
+					setTimeout(() => {
+						this.service.setCharacteristic(
+							this.platform.Characteristic.PositionState,
+							this.platform.Characteristic.PositionState.STOPPED
+						);
+						this.service.updateCharacteristic(
+							this.platform.Characteristic.PositionState,
+							this.platform.Characteristic.PositionState.STOPPED
+						);
+					}, 100);
+				} else {
+					// For non-STOPPED states, use normal update
+					this.service.setCharacteristic(
+						this.platform.Characteristic.PositionState,
+						value
+					);
+					this.service.updateCharacteristic(
+						this.platform.Characteristic.PositionState,
+						value
+					);
+				}
 
 				// Also force update current and target position to trigger refresh
 				this.service.updateCharacteristic(
@@ -132,6 +154,14 @@ export class SwitchBotCurtain3Accessory {
 							this.platform.Characteristic.PositionState,
 							this.platform.Characteristic.PositionState.STOPPED
 						);
+
+						// Also trigger accessory information refresh as a last resort
+						this.accessory
+							.getService(this.platform.Service.AccessoryInformation)!
+							.updateCharacteristic(
+								this.platform.Characteristic.Manufacturer,
+								"SwitchBot"
+							);
 					}, 500);
 				}
 			} catch (error) {
@@ -319,8 +349,10 @@ export class SwitchBotCurtain3Accessory {
 		) {
 			// Reset movement start time to when we start watching ads (actual movement monitoring)
 			this.movementStartTime = Date.now();
-			this.platform.log.debug("Reset movement start time - now monitoring actual curtain movement");
-		
+			this.platform.log.debug(
+				"Reset movement start time - now monitoring actual curtain movement"
+			);
+
 			// give it a moment then check if we should force stop
 			// Immediate check - if it's been more than 12 seconds since movement start, force stop immediately
 			const timeSinceStart = Date.now() - this.movementStartTime;
@@ -366,7 +398,9 @@ export class SwitchBotCurtain3Accessory {
 		// Handle first advertisement specially - just sync position without triggering movement logic
 		if (this.isFirstAdvertisement) {
 			this.isFirstAdvertisement = false;
-			this.platform.log.info(`Initial position from advertisement: ${revertedPosition}%`);
+			this.platform.log.info(
+				`Initial position from advertisement: ${revertedPosition}%`
+			);
 			this.setCurrentPosition(revertedPosition);
 			this.setTargetPositionInternal(revertedPosition); // Set target to match current
 			this.lastPositionChangeTime = currentTime;
@@ -377,11 +411,11 @@ export class SwitchBotCurtain3Accessory {
 		if (revertedPosition !== previousPosition) {
 			// Position has changed - update timestamp and log
 			this.lastPositionChangeTime = currentTime;
-			
+
 			// Check for large position jumps (likely movement during 10s delay period)
 			const positionDifference = Math.abs(revertedPosition - previousPosition);
 			const timeSinceMovementStart = currentTime - this.movementStartTime;
-			
+
 			if (positionDifference > 10) {
 				// Large jump - curtain likely moved during delay period
 				this.platform.log.info(
@@ -390,7 +424,7 @@ export class SwitchBotCurtain3Accessory {
 				// Set movement start time further back to account for the hidden movement
 				this.movementStartTime = currentTime - 5000; // Assume 5s of movement already happened
 			}
-			
+
 			const minimumMovementTime = 3000; // Require at least 3 seconds of movement
 
 			// Always log significant position changes, but respect debounce for unchanged positions
@@ -406,15 +440,20 @@ export class SwitchBotCurtain3Accessory {
 			// Check if we've reached the target position or are very close FIRST
 			const targetPosition = this.getTargetPosition();
 			const distanceFromTarget = Math.abs(revertedPosition - targetPosition);
-			
-			if (distanceFromTarget <= 2 && timeSinceMovementStart > minimumMovementTime) {
+
+			if (
+				distanceFromTarget <= 2 &&
+				timeSinceMovementStart > minimumMovementTime
+			) {
 				// We've reached the target (within 2%) AND enough time has passed, set state to stopped
 				if (
 					this.getPositionState() !==
 					this.platform.Characteristic.PositionState.STOPPED
 				) {
 					this.platform.log.info(
-						`Curtain reached target position ${revertedPosition}% (target: ${targetPosition}%) after ${Math.round(timeSinceMovementStart/1000)}s, stopping`
+						`Curtain reached target position ${revertedPosition}% (target: ${targetPosition}%) after ${Math.round(
+							timeSinceMovementStart / 1000
+						)}s, stopping`
 					);
 					this.setPositionState(
 						this.platform.Characteristic.PositionState.STOPPED
@@ -423,7 +462,9 @@ export class SwitchBotCurtain3Accessory {
 			} else if (distanceFromTarget <= 2) {
 				// Close to target but too soon - log but don't stop yet
 				this.platform.log.debug(
-					`Close to target ${revertedPosition}%→${targetPosition}% but only ${Math.round(timeSinceMovementStart/1000)}s elapsed, continuing...`
+					`Close to target ${revertedPosition}%→${targetPosition}% but only ${Math.round(
+						timeSinceMovementStart / 1000
+					)}s elapsed, continuing...`
 				);
 			} else {
 				// Don't auto-update target during movement - only when movement stops
