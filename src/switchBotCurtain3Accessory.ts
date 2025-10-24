@@ -16,6 +16,7 @@ export class SwitchBotCurtain3Accessory {
 
 	private lastAdLogTime: number = 0;
 	private lastPositionChangeTime: number = 0;
+	private movementStartTime: number = 0;
 
 	constructor(
 		private readonly platform: SwitchBotCurtain3Platform,
@@ -131,12 +132,16 @@ export class SwitchBotCurtain3Accessory {
 			return;
 		}
 
-		this.platform.log.info(`Setting target position to: ${value}%`);
+		this.platform.log.info(`Setting target position to: ${value}% (current: ${this.getCurrentPosition()}%)`);
 		const willIncrease = value > this.getCurrentPosition();
 		const newPosition = willIncrease
 			? this.platform.Characteristic.PositionState.INCREASING
 			: this.platform.Characteristic.PositionState.DECREASING;
 
+		this.movementStartTime = Date.now();
+		this.lastPositionChangeTime = this.movementStartTime;
+		
+		this.platform.log.info(`Curtain will ${willIncrease ? 'open (INCREASING)' : 'close (DECREASING)'}`);
 		this.setPositionState(newPosition);
 
 		try {
@@ -309,18 +314,20 @@ export class SwitchBotCurtain3Accessory {
 		} else {
 			// Position hasn't changed - check if we should consider movement stopped
 			const timeSinceLastMovement = currentTime - this.lastPositionChangeTime;
+			const timeSinceMovementStart = currentTime - this.movementStartTime;
 
 			if (
 				this.getPositionState() !==
 					this.platform.Characteristic.PositionState.STOPPED &&
-				timeSinceLastMovement > 3000
+				(timeSinceLastMovement > 3000 || timeSinceMovementStart > 60000)
 			) {
-				// 3 seconds without movement
-				// We were moving but position hasn't changed for 3+ seconds - set to stopped
+				// Stop if: 3 seconds without movement OR 60 seconds since movement started (timeout)
+				const reason = timeSinceMovementStart > 60000 ? 
+					`movement timeout after ${Math.round(timeSinceMovementStart / 1000)}s` :
+					`no movement for ${Math.round(timeSinceLastMovement / 1000)}s`;
+				
 				this.platform.log.info(
-					`Curtain movement stopped at position ${revertedPosition}% (no movement for ${Math.round(
-						timeSinceLastMovement / 1000
-					)}s)`
+					`Curtain movement stopped at position ${revertedPosition}% (${reason})`
 				);
 				this.setPositionState(
 					this.platform.Characteristic.PositionState.STOPPED
@@ -352,5 +359,11 @@ export class SwitchBotCurtain3Accessory {
 			currentPosition: 100,
 			targetPosition: 100,
 		};
+	}
+
+	// Method to force reset the position state (useful for debugging)
+	forceStopState(): void {
+		this.platform.log.info("Force setting position state to STOPPED");
+		this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 	}
 }
