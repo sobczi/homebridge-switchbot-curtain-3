@@ -185,8 +185,18 @@ export class SwitchBotCurtain3Accessory {
 		}
 
 		this.platform.log.debug(`Sending change position request to device`);
+		await new Promise((resolve, reject) => {
+			notifyChar?.notify(true, (error) => {
+				if (error) {
+					this.platform.log.error(`Failed to enable notifications: ${error}`);
+					reject(error);
+				} else {
+					this.platform.log.debug("Notifications successfully enabled.");
+					resolve("");
+				}
+			});
+		});
 		await writeChar.writeAsync(buffer, true);
-		notifyChar?.notify(true);
 
 		notifyChar?.on("data", (data) => {
 			this.platform.log.debug(data.toString());
