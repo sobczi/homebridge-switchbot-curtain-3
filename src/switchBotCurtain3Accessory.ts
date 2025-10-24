@@ -186,7 +186,7 @@ export class SwitchBotCurtain3Accessory {
 
 		this.platform.log.debug(`Sending change position request to device`);
 		await writeChar.writeAsync(buffer, true);
-		await notifyChar?.notifyAsync(true);
+		notifyChar?.notify(true);
 
 		notifyChar?.on("data", (data) => {
 			this.platform.log.debug(data.toString());
