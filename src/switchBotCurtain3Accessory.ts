@@ -191,6 +191,8 @@ export class SwitchBotCurtain3Accessory {
 			bufferData[3] > 100 ? bufferData[3] - 128 : bufferData[3];
 		const revertedPosition = 100 - position;
 
+		this.platform.log.debug(`Ad position: ${position}`);
+
 		this.setCurrentPosition(revertedPosition);
 		this.setTargetPosition(revertedPosition);
 	}
