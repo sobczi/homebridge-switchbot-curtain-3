@@ -17,6 +17,7 @@ export class SwitchBotCurtain3Accessory {
 	private lastAdLogTime: number = 0;
 	private lastPositionChangeTime: number = 0;
 	private movementStartTime: number = 0;
+	private isFirstAdvertisement: boolean = true;
 
 	constructor(
 		private readonly platform: SwitchBotCurtain3Platform,
@@ -311,11 +312,16 @@ export class SwitchBotCurtain3Accessory {
 		this.ble.watchAds();
 
 		// If we're resuming ads after a movement command and we're not in STOPPED state,
-		// give it a moment then check if we should force stop
+		// reset the movement start time to now (since we're starting to monitor actual movement)
 		if (
 			this.getPositionState() !==
 			this.platform.Characteristic.PositionState.STOPPED
 		) {
+			// Reset movement start time to when we start watching ads (actual movement monitoring)
+			this.movementStartTime = Date.now();
+			this.platform.log.debug("Reset movement start time - now monitoring actual curtain movement");
+		
+			// give it a moment then check if we should force stop
 			// Immediate check - if it's been more than 12 seconds since movement start, force stop immediately
 			const timeSinceStart = Date.now() - this.movementStartTime;
 			if (timeSinceStart > 12000) {
@@ -357,12 +363,34 @@ export class SwitchBotCurtain3Accessory {
 		const timeSinceLastLog = currentTime - this.lastAdLogTime;
 		const shouldLog = timeSinceLastLog >= 2000; // 2 seconds debounce
 
+		// Handle first advertisement specially - just sync position without triggering movement logic
+		if (this.isFirstAdvertisement) {
+			this.isFirstAdvertisement = false;
+			this.platform.log.info(`Initial position from advertisement: ${revertedPosition}%`);
+			this.setCurrentPosition(revertedPosition);
+			this.setTargetPositionInternal(revertedPosition); // Set target to match current
+			this.lastPositionChangeTime = currentTime;
+			this.lastAdLogTime = currentTime;
+			return;
+		}
+
 		if (revertedPosition !== previousPosition) {
 			// Position has changed - update timestamp and log
 			this.lastPositionChangeTime = currentTime;
 			
-			// Don't allow stopping too quickly after movement started (curtain needs time to move)
+			// Check for large position jumps (likely movement during 10s delay period)
+			const positionDifference = Math.abs(revertedPosition - previousPosition);
 			const timeSinceMovementStart = currentTime - this.movementStartTime;
+			
+			if (positionDifference > 10) {
+				// Large jump - curtain likely moved during delay period
+				this.platform.log.info(
+					`Large position change detected: ${previousPosition}% → ${revertedPosition}% (likely moved during delay period)`
+				);
+				// Set movement start time further back to account for the hidden movement
+				this.movementStartTime = currentTime - 5000; // Assume 5s of movement already happened
+			}
+			
 			const minimumMovementTime = 3000; // Require at least 3 seconds of movement
 
 			// Always log significant position changes, but respect debounce for unchanged positions
