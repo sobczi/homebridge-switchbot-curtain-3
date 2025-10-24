@@ -14,6 +14,8 @@ export class SwitchBotCurtain3Accessory {
 
 	private currentState: Curtain3State;
 
+	private lastAdLogTime: number = 0;
+
 	constructor(
 		private readonly platform: SwitchBotCurtain3Platform,
 		private readonly accessory: PlatformAccessory,
@@ -70,8 +72,13 @@ export class SwitchBotCurtain3Accessory {
 		const value = param as number;
 		if (value !== this.currentState.currentPosition) {
 			this.platform.log.debug(`Changing current position to: ${value}`);
+			this.currentState.currentPosition = value;
+			// Update the HomeKit characteristic to reflect the change
+			this.service.updateCharacteristic(
+				this.platform.Characteristic.CurrentPosition,
+				value
+			);
 		}
-		this.currentState.currentPosition = value;
 	}
 
 	// PositionState
@@ -85,8 +92,13 @@ export class SwitchBotCurtain3Accessory {
 			this.platform.log.debug(
 				`Changing position state to: ${value} (0 - decreasing, 1 - increasing, 2 - stopped)`
 			);
+			this.currentState.positionState = value as 0 | 1 | 2;
+			// Update the HomeKit characteristic to reflect the change
+			this.service.updateCharacteristic(
+				this.platform.Characteristic.PositionState,
+				value
+			);
 		}
-		this.currentState.positionState = value as 0 | 1 | 2;
 	}
 
 	// Target position
@@ -95,30 +107,53 @@ export class SwitchBotCurtain3Accessory {
 		return this.currentState.targetPosition;
 	}
 
+	private setTargetPositionInternal(value: number): void {
+		if (value !== this.currentState.targetPosition) {
+			this.currentState.targetPosition = value;
+			// Update the HomeKit characteristic to reflect the change
+			this.service.updateCharacteristic(
+				this.platform.Characteristic.TargetPosition,
+				value
+			);
+		}
+	}
+
 	async setTargetPosition(param: CharacteristicValue): Promise<void> {
 		const value = param as number;
-		this.currentState.targetPosition = value;
+		this.setTargetPositionInternal(value);
 
 		if (this.getTargetPosition() === this.getCurrentPosition()) {
+			this.platform.log.info(
+				`Target position ${value}% matches current position, no movement needed`
+			);
 			this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 			return;
 		}
 
-		this.platform.log.debug(`Changing target position to: ${value}`);
+		this.platform.log.info(`Setting target position to: ${value}%`);
 		const willIncrease = value > this.getCurrentPosition();
 		const newPosition = willIncrease
 			? this.platform.Characteristic.PositionState.INCREASING
 			: this.platform.Characteristic.PositionState.DECREASING;
 
 		this.setPositionState(newPosition);
-		await this.changePosition(value);
-		const changedPosition = this.getCurrentPosition();
-		if (changedPosition !== this.getTargetPosition()) {
-			this.platform.log.debug(`Position change to ${changedPosition} failed.`);
+
+		try {
+			await this.changePosition(value);
+			this.platform.log.info(
+				`Position change command sent successfully to ${value}%`
+			);
+
+			// Update the current position to match target immediately for better UX
+			// The real position will be updated when we receive advertisements
+			this.setCurrentPosition(value);
+		} catch (error) {
+			this.platform.log.error(`Failed to change position: ${error}`);
+			this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
+			throw error;
 		}
-		this.platform.log.debug(
-			`Change position success. Changing state to stopped.`
-		);
+
+		// Set state to stopped - the actual movement will be tracked via advertisements
 		this.setPositionState(this.platform.Characteristic.PositionState.STOPPED);
 	}
 
@@ -154,12 +189,6 @@ export class SwitchBotCurtain3Accessory {
 				const characteristics = await service.discoverCharacteristicsAsync();
 				this.platform.log.debug(`characteristics: ${characteristics.length}`);
 
-				for (const char of characteristics) {
-					this.platform.log.debug(
-						`Characteristic UUID: ${char.uuid}, properties: ${char.type}`
-					);
-				}
-
 				if (!writeChar) {
 					writeChar = characteristics.find((c) =>
 						c.properties.includes("write")
@@ -190,26 +219,32 @@ export class SwitchBotCurtain3Accessory {
 			throw Error("Couldn't find write charateristics");
 		}
 
-		this.platform.log.debug(`Sending change position request to device`);
-		await new Promise((resolve, reject) => {
-			notifyChar?.notify(true, (error) => {
-				if (error) {
-					this.platform.log.error(`Failed to enable notifications: ${error}`);
-					reject(error);
-				} else {
-					this.platform.log.debug("Notifications successfully enabled.");
-					resolve("");
-				}
-			});
-		});
-		await writeChar.writeAsync(buffer, true);
+		this.platform.log.info(
+			`Sending position change command to device (target: ${position})`
+		);
 
+		// Enable notifications to receive feedback
+		notifyChar?.notify(true);
+
+		// Set up data handler before sending command
 		notifyChar?.on("data", (data) => {
-			this.platform.log.debug(data.toString());
+			this.platform.log.info(
+				`Received response from device: ${data.toString("hex")}`
+			);
 		});
 
+		// Send the position change command
+		await writeChar.writeAsync(buffer, true);
+		this.platform.log.info(
+			"Position change command sent to device successfully"
+		);
+
+		// Disconnect and resume watching advertisements
 		if (this.curtain.state === "connected") {
 			await this.curtain.disconnectAsync();
+			this.platform.log.debug(
+				"Disconnected from device, resuming advertisement watching"
+			);
 			this.watchAds();
 		}
 	}
@@ -228,10 +263,33 @@ export class SwitchBotCurtain3Accessory {
 			bufferData[3] > 100 ? bufferData[3] - 128 : bufferData[3];
 		const revertedPosition = 100 - position;
 
-		this.platform.log.debug(`Ad position: ${position}`);
+		const previousPosition = this.getCurrentPosition();
+		const currentTime = Date.now();
+		const timeSinceLastLog = currentTime - this.lastAdLogTime;
+		const shouldLog = timeSinceLastLog >= 2000; // 2 seconds debounce
 
-		this.setCurrentPosition(revertedPosition);
-		this.setTargetPosition(revertedPosition);
+		if (revertedPosition !== previousPosition) {
+			// Always log significant position changes, but respect debounce for unchanged positions
+			if (shouldLog || Math.abs(revertedPosition - previousPosition) >= 1) {
+				this.platform.log.info(
+					`Position updated via advertisement: ${revertedPosition}% (was ${previousPosition}%)`
+				);
+				this.lastAdLogTime = currentTime;
+			}
+
+			this.setCurrentPosition(revertedPosition);
+
+			// Only update target position if it's significantly different (prevents drift)
+			if (Math.abs(revertedPosition - this.getTargetPosition()) > 5) {
+				this.setTargetPositionInternal(revertedPosition);
+			}
+		} else {
+			// Only log unchanged position with debounce
+			if (shouldLog) {
+				this.platform.log.debug(`Ad position unchanged: ${revertedPosition}%`);
+				this.lastAdLogTime = currentTime;
+			}
+		}
 	}
 
 	private setInitialState(): Curtain3State {
