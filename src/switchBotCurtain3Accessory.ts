@@ -144,7 +144,6 @@ export class SwitchBotCurtain3Accessory {
 			await this.curtain.connectAsync();
 		}
 
-		await this.ble.stopScanning();
 		let writeChar: Characteristic | undefined;
 		let notifyChar: Characteristic | undefined;
 		while (!writeChar) {
